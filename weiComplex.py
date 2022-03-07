@@ -510,7 +510,6 @@ def make_all_masks(image, experimentDirectory, mask, detNum):
         user_mask = fabio.open(os.path.join(experimentDirectory, mask)).data
     else:
         user_mask = np.zeros(image.shape)
-        print("User mask shape: " + str(user_mask.shape))
 
     if varReject.get() == 1 and detNum == 1: # detNum == 1 is SAXS!
         reject_data = import_reject_mask(experimentDirectory, "REJECT.dat")
@@ -519,9 +518,6 @@ def make_all_masks(image, experimentDirectory, mask, detNum):
         reject_mask = np.zeros(image.shape)
 
     maskData = combine_masks(eiger_mask, user_mask, reject_mask)
-    print("Mask data is: ")
-    print(maskData)
-    print("shape is" + str(maskData.shape))
     return maskData
 
 def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
@@ -629,28 +625,6 @@ def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
             data_in = np.copy(intImSmp.data) # should be using copy as python objects are mutable!!!!
             maskData = make_all_masks(data_in, experimentDirectory, mask, detNum)
             print(intImSmp.data)
-            # image = intImSmp.data
-            # if varEigerMask.get() == 1:
-            #     eiger_mask = make_Eiger_mask(image)
-            # else: 
-            #     eiger_mask = np.zeros(image.shape)
-                
-            # if len(mask) > 0:
-            #     user_mask = fabio.open(os.path.join(experimentDirectory, mask)).data
-            # else:
-            #     user_mask = np.zeros(image.shape)
-            #     print("User mask shape: " + str(user_mask.shape))
-
-            # if varReject.get() == 1 and detNum == 2:
-            #     reject_data = import_reject_mask(experimentDirectory, "REJECT.dat")
-            #     reject_mask = make_reject_mask(intImSmp.data, reject_data)
-            # else:
-            #     reject_mask = np.zeros(image.shape)
-
-            # maskData = combine_masks(eiger_mask, user_mask, reject_mask)
-            # print("Mask data is: ")
-            # print(maskData)
-            # print("shape is" + str(maskData.shape))
 
         # calc normalization value norm value is division
         # civi, thickness, TM, /scaleFactor
