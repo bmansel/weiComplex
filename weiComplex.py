@@ -494,6 +494,12 @@ def make_reject_mask(image, reject_data):
     image[ np.array(reject_data[:,1], dtype=np.int_) , np.array(reject_data[:,0], dtype=np.int_) ] = 1
     return np.array(image)
 
+def apply_reject_mask(image, reject_data):
+    #maskPixels = np.squeeze(np.where(image >= 4000000000))
+    image[reject_data[:,1], np.array(reject_data[:,0]] = 0 # for image this is zero!
+    return np.array(image)
+
+
 def combine_masks(eiger_mask, user_mask, reject_mask):
     combined_mask = eiger_mask + user_mask + reject_mask
     combined_mask[combined_mask > 1] = 1
@@ -1224,7 +1230,6 @@ def getqFromIm(event):
     del ix, iy
 
 def make_Eiger_mask(frame):
-
     # mask vales are 2^32-1 = 4294967295 for 32 bit image
     maskPixels = np.squeeze(np.where(frame == 4294967295))
     frame.fill(0)
@@ -1259,14 +1264,13 @@ def showPlot2d():
     if is1M == True:
         fileName = fileName[1:3] + fileName[0]
         ai = getAI("eiger1m")
-        if varMask2d.get() == 1:
+        if varMask2d.get() == 1:     # first try get user mask
             try:
                 mask = fabio.open(os.path.join(
                     experimentDirectory, entMask1M.get().strip())).data
             except:
-                messagebox.showerror(title="File not found", message=str(
-                    os.path.join(experimentDirectory, entMask1M.get().strip()) + " Not found"))
-                return
+                pass
+                
     else:
         ai = getAI("eiger9m")
         if varMask2d.get() == 1:
@@ -1274,9 +1278,8 @@ def showPlot2d():
                 mask = fabio.open(os.path.join(
                     experimentDirectory, entMask9M.get().strip())).data
             except:
-                messagebox.showerror(title="File not found", message=str(
-                    os.path.join(experimentDirectory, entMask9M.get().strip()) + " Not found"))
-                return
+                pass
+                
 
     if frame == 0:
         img = fabio.open(os.path.join(
@@ -1286,6 +1289,7 @@ def showPlot2d():
             experimentDirectory, fileName+"_master.h5"))
         img = allFrames.getframe(frame)
     plot2d.clear()
+
     masked_image = apply_Eiger_mask(img.data)
 
     # get beam center
@@ -1336,8 +1340,12 @@ def showPlot2d():
         qZ0 = -qZ0
 
     if varMask2d.get() == 1:
-        mask = 1-mask  # invert mask
-        masked_image = np.multiply(masked_image, mask)
+        try:
+            mask = 1-mask  # invert mask
+            masked_image = np.multiply(masked_image, mask)
+        except:
+            pass
+            #messagebox.showwarning(title='Warning', message='No user Mask supplied')
 
     if var2dThreshold.get() == 1:
         minColor = float(entImgMin.get().strip())
