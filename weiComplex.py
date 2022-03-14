@@ -484,19 +484,23 @@ def getTransmission(airTMImage, smpTMImage, isBKG):
     # plt.imshow(airTransData[round(BeamCenY)-20:round(BeamCenY)+20,round(BeamCenX)-20:round(BeamCenX)+20])
     # plt.show()
 
+
 def import_reject_mask(exp_dir, reject_mask):
-    data = np.loadtxt(exp_dir + "/" + reject_mask, usecols=(0,1))
+    data = np.loadtxt(exp_dir + "/" + reject_mask, usecols=(0, 1))
     return data
+
 
 def make_reject_mask(image, reject_data):
     # take x, y reject data and make 2d image mask
-    #image[image == 1] = 0  # this is zero already
-    image[ np.array(reject_data[:,1], dtype=np.int_) , np.array(reject_data[:,0], dtype=np.int_) ] = 1
+    # image[image == 1] = 0  # this is zero already
+    image[np.array(reject_data[:, 1], dtype=np.int_),
+          np.array(reject_data[:, 0], dtype=np.int_)] = 1
     return np.array(image)
+
 
 def apply_reject_mask(image, reject_data):
     #maskPixels = np.squeeze(np.where(image >= 4000000000))
-    image[reject_data[:,1], np.array(reject_data[:,0]] = 0 # for image this is zero!
+    image[reject_data[:, 1], reject_data[:, 0]] = 0  # for image this is zero!
     return np.array(image)
 
 
@@ -506,18 +510,19 @@ def combine_masks(eiger_mask, user_mask, reject_mask):
     #combined_mask[combined_mask > 1] = 1
     return np.array(combined_mask)
 
+
 def make_all_masks(image, experimentDirectory, mask, detNum):
     if varEigerMask.get() == 1:
         eiger_mask = make_Eiger_mask(image)
-    else: 
+    else:
         eiger_mask = np.zeros(image.shape)
-                
+
     if len(mask) > 0:
         user_mask = fabio.open(os.path.join(experimentDirectory, mask)).data
     else:
         user_mask = np.zeros(image.shape)
 
-    if varReject.get() == 1 and detNum == 1: # detNum == 1 is SAXS!
+    if varReject.get() == 1 and detNum == 1:  # detNum == 1 is SAXS!
         reject_data = import_reject_mask(experimentDirectory, "REJECT.dat")
         reject_mask = make_reject_mask(image, reject_data)
     else:
@@ -525,6 +530,7 @@ def make_all_masks(image, experimentDirectory, mask, detNum):
 
     maskData = combine_masks(eiger_mask, user_mask, reject_mask)
     return maskData
+
 
 def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
     # take in different number of arguments to handle background subtraction
@@ -627,9 +633,11 @@ def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
                     experimentDirectory, fileNameSmp[1:3]+fileNameSmp[0]+"_master.h5"))
         else:
             intImSmp = imgSmp.getframe(frame)
-        if frame == 0: # first frame get the mask
-            data_in = np.copy(intImSmp.data) # should be using copy as python objects are mutable!!!!
-            maskData = make_all_masks(data_in, experimentDirectory, mask, detNum)
+        if frame == 0:  # first frame get the mask
+            # should be using copy as python objects are mutable!!!!
+            data_in = np.copy(intImSmp.data)
+            maskData = make_all_masks(
+                data_in, experimentDirectory, mask, detNum)
             print(intImSmp.data)
 
         # calc normalization value norm value is division
@@ -737,6 +745,7 @@ def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
     except:
         messagebox.showinfo(
             title="Error", message="Save data location unknown, \nplease select file > save experiment \n or check advanced tab has the data file with .wc ")
+
 
 def integrateMultiDet():
     global entTransAirFrm, entBkgSAXSFrm, entTransBkgFrm, entTransSmpFrm, entSmpSAXSFrm
@@ -1229,6 +1238,7 @@ def getqFromIm(event):
     entQpos.insert(END, str(np.round(q, 5)))
     del ix, iy
 
+
 def make_Eiger_mask(frame):
     # mask vales are 2^32-1 = 4294967295 for 32 bit image
     maskPixels = np.squeeze(np.where(frame == 4294967295))
@@ -1237,11 +1247,12 @@ def make_Eiger_mask(frame):
     frame[maskPixels[0], maskPixels[1]] = 1
     return np.array(frame)
 
+
 def apply_Eiger_mask(image):
     # mask vales are 2^32-1 = 4294967295 for 32 bit image
     maskPixels = np.squeeze(np.where(image == 4294967295))
     #maskPixels = np.squeeze(np.where(image >= 4000000000))
-    image[maskPixels[0], maskPixels[1]] = 0 # for image this is zero!
+    image[maskPixels[0], maskPixels[1]] = 0  # for image this is zero!
     return np.array(image)
 
 # def threshold_mask(image,threshold):
@@ -1270,16 +1281,15 @@ def showPlot2d():
                     experimentDirectory, entMask1M.get().strip())).data
             except:
                 pass
-                
+
     else:
         ai = getAI("eiger9m")
         if varMask2d.get() == 1:
-            try:
+            try:  # try to get user mask
                 mask = fabio.open(os.path.join(
                     experimentDirectory, entMask9M.get().strip())).data
             except:
                 pass
-                
 
     if frame == 0:
         img = fabio.open(os.path.join(
@@ -1290,8 +1300,9 @@ def showPlot2d():
         img = allFrames.getframe(frame)
     plot2d.clear()
 
-    masked_image = apply_Eiger_mask(img.data)
 
+    masked_image = apply_Eiger_mask(img.data) 
+    
     # get beam center
     Fit2dDic1 = ai.getFit2D()
     BeamCenX = Fit2dDic1["centerX"]
@@ -1345,6 +1356,15 @@ def showPlot2d():
             masked_image = np.multiply(masked_image, mask)
         except:
             pass
+
+        if is1M is False:
+            try:
+                reject_data = import_reject_mask(experimentDirectory, "REJECT.dat")
+                masked_image = apply_reject_mask(maked_image, reject_data)
+            except:
+                pass
+
+
             #messagebox.showwarning(title='Warning', message='No user Mask supplied')
 
     if var2dThreshold.get() == 1:
@@ -1830,7 +1850,7 @@ cbPsaxsPar = Checkbutton(frameReduction, text="pSAXSpar.txt",
 cbwaxsPar = Checkbutton(frameReduction, text="WAXSpar.txt",
                         variable=varWaxspar, onvalue=1, offvalue=0, command=toggle_entry_boxes)
 cbRejectMask = Checkbutton(frameReduction, text="REJECT.dat",
-                        variable=varReject, onvalue=1, offvalue=0)
+                           variable=varReject, onvalue=1, offvalue=0)
 
 # frame Plotting
 cbLogX = Checkbutton(framePlotting2, text="Log X",
@@ -1850,7 +1870,8 @@ cbExportas = Checkbutton(framePlotting2, text="Exp. as",
                          variable=varExportas, onvalue=1, offvalue=0)
 
 # advanced options
-cbUseEigerMask = Checkbutton(frameAdvanced, text="Use Eiger Mask", variable=varEigerMask, onvalue=1, offvalue=0)
+cbUseEigerMask = Checkbutton(
+    frameAdvanced, text="Use Eiger Mask", variable=varEigerMask, onvalue=1, offvalue=0)
 cbUseEigerMask.select()
 
 # Progress bars
