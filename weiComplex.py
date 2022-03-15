@@ -183,7 +183,8 @@ def openPONIfileWindow():
         # Flip image for 1M!!!!!
 
         if varDetSel.get() == "eiger1m":
-            paramsFIT2d["beamCenY"] = 1065.0 - float(paramsFIT2d["beamCenY"])
+            if varOldGeometry.get() == 1:
+                paramsFIT2d["beamCenY"] = 1065.0 - float(paramsFIT2d["beamCenY"])
 
         ai.setFit2D(float(paramsFIT2d["smpDetDist"]), float(paramsFIT2d["beamCenX"]), float(paramsFIT2d["beamCenY"]),
                     tilt=float(paramsFIT2d["tilt"]), tiltPlanRotation=float(paramsFIT2d["tiltPlanRot"]))
@@ -370,7 +371,8 @@ def readWAXSpar(exp_dir, fname):
         if count == 3:
             FIT2dParams['beamY'] = line.split()[0]
             # correct flip 2d image in theis definition
-            FIT2dParams['beamY'] = 1065.0-float(FIT2dParams['beamY'])
+            if varOldGeometry.get() == 1:
+                FIT2dParams['beamY'] = 1065.0-float(FIT2dParams['beamY'])
         if count == 4:
             FIT2dParams['tiltPlanRotation'] = line.split()[0]
         if count == 5:
@@ -406,19 +408,37 @@ def getTransmission(airTMImage, smpTMImage, isBKG):
     # read in transmission images
     #mask = fabio.open(os.path.join(experimentDirectory,txtMask1.get("1.0", 'end-1c'))).data
     # mask = 1- mask # invert mask
+    if var_TM_detector.get() == "9M":
+        ai = getAI("eiger9m")  # always use 9m for transmission.
+        Fit2dDic = ai.getFit2D()
+        civiAir, rigiAir, expTimeAir = readHeaderFile(airTMImage)
+        civiSmp, rigiSmp, expTimeSmp = readHeaderFile(smpTMImage)
+    elif var_TM_detector.get() == "1M":
+        ai = getAI("eiger1m")
+        Fit2dDic = ai.getFit2D()
+        civiAir, rigiAir, expTimeAir = readHeaderFile(airTMImage) # import when defined around the correct way
+        civiSmp, rigiSmp, expTimeSmp = readHeaderFile(smpTMImage)
+        airTMImage = airTMImage[1:3] + airTMImage[0]
+        smpTMImage = smpTMImage[1:3] + smpTMImage[0]
+        
 
-    ai = getAI("eiger9m")  # always use 9m for transmission.
     airTransData = fabio.open(os.path.join(
         experimentDirectory, airTMImage + "_master.h5")).data
     # airTransData = np.multiply(airTransData,mask) #apply mask
     smpTransData = fabio.open(os.path.join(
         experimentDirectory, smpTMImage + "_master.h5")).data
     # smpTransData = np.multiply(smpTransData,mask) #apply mask
-    Fit2dDic = ai.getFit2D()
+    
     BeamCenX = Fit2dDic["centerX"]
-    BeamCenY = Fit2dDic["centerY"]
-    civiAir, rigiAir, expTimeAir = readHeaderFile(airTMImage)
-    civiSmp, rigiSmp, expTimeSmp = readHeaderFile(smpTMImage)
+    if var_TM_detector.get() == "1M":
+        if varWaxspar.get() == 1: # Use fit 2D coords
+            if varOldGeometry.get() == 1:
+                BeamCenY = 1065.0 - float(Fit2dDic["centerY"])
+        else:
+            BeamCenY = Fit2dDic["centerY"]
+    else:
+        BeamCenY = Fit2dDic["centerY"]
+    
     # check the center of beam
     pixels = 50  # half number of pixels used in centroid
     smpBeamCenter = ndimage.measurements.center_of_mass(smpTransData[round(
@@ -638,7 +658,7 @@ def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
             data_in = np.copy(intImSmp.data)
             maskData = make_all_masks(
                 data_in, experimentDirectory, mask, detNum)
-            print(intImSmp.data)
+            #print(intImSmp.data)
 
         # calc normalization value norm value is division
         # civi, thickness, TM, /scaleFactor
@@ -1300,9 +1320,8 @@ def showPlot2d():
         img = allFrames.getframe(frame)
     plot2d.clear()
 
+    masked_image = apply_Eiger_mask(img.data)
 
-    masked_image = apply_Eiger_mask(img.data) 
-    
     # get beam center
     Fit2dDic1 = ai.getFit2D()
     BeamCenX = Fit2dDic1["centerX"]
@@ -1352,20 +1371,29 @@ def showPlot2d():
 
     if varMask2d.get() == 1:
         try:
-            mask = 1-mask  # invert mask
-            masked_image = np.multiply(masked_image, mask)
+            user_mask = 1-mask.copy()  # invert mask
+            masked_image = np.multiply(masked_image.copy(), user_mask)
         except:
             pass
 
-        if is1M is False:
+        if is1M is False and varReject.get() == 1:
             try:
-                reject_data = import_reject_mask(experimentDirectory, "REJECT.dat")
-                masked_image = apply_reject_mask(maked_image, reject_data)
+                reject_data = import_reject_mask(
+                    experimentDirectory, "REJECT.dat")
+                reject_mask = make_reject_mask(
+                    np.zeros(masked_image.shape), reject_data)
+                reject_mask = 1 - reject_mask.copy()
+                masked_image = np.multiply(masked_image.copy(), reject_mask)
+                #masked_image = apply_reject_mask(maked_image.copy(), reject_data)
             except:
-                pass
-
+                messagebox.showwarning(
+                    title='Warning', message='Reject mask not applied')
+                # pass
 
             #messagebox.showwarning(title='Warning', message='No user Mask supplied')
+    
+    if is1M:
+        masked_image = np.transpose(masked_image.copy())
 
     if var2dThreshold.get() == 1:
         minColor = float(entImgMin.get().strip())
@@ -1685,6 +1713,15 @@ def onsize(event):
         framePlot.config(width=500, height=580)
         fig.set_size_inches(500/100, 520/100, forward=True)  # 100 dpi
 
+def OM_OS_change(event):
+    print("here")
+    if varOS.get() == "TPS13A Windows":
+        entAnacondaDir.delete(0, END)
+        entAnacondaDir.insert(END,"C:/Users/NSRRC/AppData/Local/Schrodinger/PyMOL2/Scripts")
+
+    elif varOS.get() == "Windows":
+        entAnacondaDir.delete(0, END)
+        entAnacondaDir.insert(END,"C:/Users/user/anaconda3/Scripts")
 
 ##################################################
 # Initialization stuff
@@ -1808,7 +1845,8 @@ entScale1M.insert(END, "1.0")
 # txtScale1M.insert(END,"0.001")
 # frame advanced
 entAnacondaDir = Entry(frameAdvanced, width=40)
-entAnacondaDir.insert(END, "C:/Users/user/anaconda3/Scripts")
+entAnacondaDir.insert(END, "C:/Users/NSRRC/AppData/Local/Schrodinger/PyMOL2/Scripts")
+#entAnacondaDir.insert(END, "C:/Users/user/anaconda3/Scripts")
 entPrimusDir = Entry(frameAdvanced, width=40)
 entPrimusDir.insert(END, "C:/some/dir/where/it/exists")
 entExperimentFile = Entry(frameAdvanced, width=20)
@@ -1834,6 +1872,7 @@ varExportas = IntVar()
 varRotate = IntVar()
 varEigerMask = IntVar()
 varReject = IntVar()
+varOldGeometry = IntVar()
 
 cbManTMSmp = Checkbutton(frameReduction, text="Calc TM", variable=varCalcTMSmp,
                          onvalue=1, offvalue=0, command=toggle_entry_boxes)
@@ -1873,7 +1912,8 @@ cbExportas = Checkbutton(framePlotting2, text="Exp. as",
 cbUseEigerMask = Checkbutton(
     frameAdvanced, text="Use Eiger Mask", variable=varEigerMask, onvalue=1, offvalue=0)
 cbUseEigerMask.select()
-
+cb_old_Fit2d_geometry = Checkbutton(frameAdvanced, text="Old Fit 2D geometry", variable=varOldGeometry, onvalue=1, offvalue=0)
+cb_old_Fit2d_geometry.deselect()
 # Progress bars
 progBarSAXS = ttk.Progressbar(
     frameReduction, orient=HORIZONTAL, length=300, mode='determinate')
@@ -1884,7 +1924,7 @@ progBarWAXS = ttk.Progressbar(
 varBeamPixels = StringVar()
 varBeamPixels.set("Beam 5 pixels")
 varOS = StringVar()
-varOS.set("Windows")
+varOS.set("TPS13A Windows")
 varDetector = StringVar()
 varDetector.set("9M and 1M")
 varOperations = StringVar()
@@ -1893,16 +1933,19 @@ varSave = StringVar()
 varSave.set("Save All Data")
 varPlotStyle = StringVar()
 varPlotStyle.set("Line")
+var_TM_detector = StringVar()
+var_TM_detector.set("9M")
 
 omBeamPixels = OptionMenu(frameReduction, varBeamPixels,
                           "Beam 3 pixels", "Beam 5 pixels", "Beam 7 pixels")
 omDetector = OptionMenu(frameReduction, varDetector, "9M and 1M", "9M", "1M")
 omSave = OptionMenu(frameReduction, varSave, "Save All Data", "Manual Save")
+om_TM_dector = OptionMenu(frameReduction, var_TM_detector, "9M", "1M")
 omOperate = OptionMenu(framePlotting2, varOperations, "9M and 1M", "Seperate")
 
-omPlotStyle = OptionMenu(framePlotting2, varPlotStyle, "Line", "Points")
 
-omOS = OptionMenu(frameAdvanced, varOS, "Windows", "Linux")
+omPlotStyle = OptionMenu(framePlotting2, varPlotStyle, "Line", "Points")
+omOS = OptionMenu(frameAdvanced, varOS, "TPS13A Windows", "Windows", "Linux",command=OM_OS_change)
 # Main treeview
 frame_tvData = LabelFrame(
     framePlotting2, text="All Data", font=('TkDefaultFont', 15))
@@ -1930,6 +1973,7 @@ tvData.heading("TM", text="TM")
 lblDirectory = Label(frameReduction, text="Directory: Please select")
 #lblBeamX = Label(frameReduction,text="X Beam Center:")
 #lblBeamY = Label(frameReduction,text="Y Beam Center:")
+lbl_TM_detector = Label(frameReduction, text="TM direct beam on:")
 lblTMVal = Label(frameReduction, text="TM Sample: ")
 lblTMBkgVal = Label(frameReduction, text="TM Background: ")
 lblTMAirFrm = Label(frameReduction, text="TM \n Frame Air")
@@ -1968,7 +2012,7 @@ lblScale1M = Label(framePlotting2, text="Scale 1M \n(plotting/merge)")
 lblstatus = Label(framePlotting2, text="Status:")
 
 # Frame advanced
-lblOS = Label(frameAdvanced, text="Operating System:")
+lblOS = Label(frameAdvanced, text="Operating Environment:")
 lblAnacondaDir = Label(
     frameAdvanced, text="Anaconda script dir :\n (win OS only)")
 lblPrimusDir = Label(frameAdvanced, text="Primus dir :\n (win OS only)")
@@ -2030,6 +2074,8 @@ omBeamPixels.grid(column=1, row=0)
 btn_get_tansmission.grid(column=0, row=0)
 omDetector.grid(column=1, row=1)
 omSave.grid(column=1, row=2)
+lbl_TM_detector.grid(column=0, row=3)
+om_TM_dector.grid(column=1, row=3)
 lblTMAirFrm.grid(column=3, row=0)
 lblTMSmpFrm.grid(column=4, row=0)
 lblSAXSsmpFrm.grid(column=5, row=0)
@@ -2043,39 +2089,38 @@ entBkgSAXSFrm[0].grid(column=7, row=1)
 cbSubBkg[-1].grid(column=8, row=1)
 btn_increase_entry_row.grid(column=8, row=0)
 
-
 # lblBeamX.grid(column=0,row=3)
 # lblBeamY.grid(column=0,row=4)
-lblTMVal.grid(column=0, row=3)
-lblTMBkgVal.grid(column=0, row=4)
-entbkgTMVal.grid(column=1, row=4)
+lblTMVal.grid(column=0, row=4)
+lblTMBkgVal.grid(column=0, row=5)
+entbkgTMVal.grid(column=1, row=5)
 # entBeamX.grid(column=1,row=3)
 # entBeamY.grid(column=1,row=4)
-entsmpTMVal.grid(column=1, row=3)
-cbManTMSmp.grid(column=2, row=3, sticky='w')
-cbManTMBkg.grid(column=2, row=4, sticky='w')
-entMask9M.grid(column=1, row=5)
-lblMask9M.grid(column=0, row=5)
-cbRejectMask.grid(column=2, row=5, sticky='w')
-entMask1M.grid(column=1, row=6)
-lblMask1M.grid(column=0, row=6)
-entPoni9M.grid(column=1, row=7)
-lblPoni9M.grid(column=0, row=7)
-cbPsaxsPar.grid(column=2, row=7)
-entPoni1M.grid(column=1, row=8)
-lblPoni1M.grid(column=0, row=8)
-cbwaxsPar.grid(column=2, row=8)
-lblScaleFactor.grid(column=0, row=9)
-entScaleFactor.grid(column=1, row=9)
-lblThickness.grid(column=0, row=10)
-entThickness.grid(column=1, row=10)
-lblNumPoints.grid(column=0, row=11)
-entNumPoints.grid(column=1, row=11)
-lblProgBarSAXS.grid(column=1, row=12)
-progBarSAXS.grid(column=0, row=13, columnspan=3)
-lblProgBarWAXS.grid(column=1, row=14)
-progBarWAXS.grid(column=0, row=15, columnspan=3)
-lblDirectory.grid(column=0, row=16, columnspan=3, sticky='w')
+entsmpTMVal.grid(column=1, row=4)
+cbManTMSmp.grid(column=2, row=4, sticky='w')
+cbManTMBkg.grid(column=2, row=5, sticky='w')
+entMask9M.grid(column=1, row=6)
+lblMask9M.grid(column=0, row=6)
+cbRejectMask.grid(column=2, row=6, sticky='w')
+entMask1M.grid(column=1, row=7)
+lblMask1M.grid(column=0, row=7)
+entPoni9M.grid(column=1, row=8)
+lblPoni9M.grid(column=0, row=8)
+cbPsaxsPar.grid(column=2, row=8)
+entPoni1M.grid(column=1, row=9)
+lblPoni1M.grid(column=0, row=9)
+cbwaxsPar.grid(column=2, row=9)
+lblScaleFactor.grid(column=0, row=10)
+entScaleFactor.grid(column=1, row=10)
+lblThickness.grid(column=0, row=11)
+entThickness.grid(column=1, row=11)
+lblNumPoints.grid(column=0, row=12)
+entNumPoints.grid(column=1, row=12)
+lblProgBarSAXS.grid(column=1, row=13)
+progBarSAXS.grid(column=0, row=14, columnspan=3)
+lblProgBarWAXS.grid(column=1, row=15)
+progBarWAXS.grid(column=0, row=16, columnspan=3)
+lblDirectory.grid(column=0, row=17, columnspan=3, sticky='w')
 
 # frame plotting
 tvData.pack()
@@ -2131,6 +2176,7 @@ entExperimentFile.grid(column=1, row=3, sticky='w')
 btn_clear_memory.grid(column=0, row=4)
 btn_load_experiment.grid(column=0, row=5)
 cbUseEigerMask.grid(column=0, row=6)
+cb_old_Fit2d_geometry.grid(column=0, row=7)
 
 # plotting data
 framePlot.grid(column=8, row=3, columnspan=20, rowspan=20, padx=10)
