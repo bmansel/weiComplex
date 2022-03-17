@@ -559,11 +559,11 @@ def integrateImage(*args):  # fileImages, poni, mask,detNum, TM):
     # case 2: FileNameSmp, FileNameBkg, det_name, mask, detNum, TM_smp, TM_bkg [varSubBkg =1]
     # data format [[0]name, [1]ID, [2]multi det. flag, [3]sum(I), [4]q, [5]I, [6]err]
     global scatteringData
-    if scatteringData is None:
+    if scatteringData is None or scatteringData == []:
         imageCount = 0
         scatteringData = []
     else:
-        imageCount = int(scatteringData[-1].params["ID"]) + 1
+        imageCount = int(scatteringData[-1].params["ID"]) + 1 # this could be improved..
 
     if args[-1] == 0:
         fileNameSmp = args[0]
@@ -1393,7 +1393,7 @@ def showPlot2d():
             #messagebox.showwarning(title='Warning', message='No user Mask supplied')
     
     if is1M:
-        masked_image = np.transpose(masked_image.copy())
+        masked_image = np.flipud(np.transpose(masked_image.copy()))
 
     if var2dThreshold.get() == 1:
         minColor = float(entImgMin.get().strip())
@@ -1913,7 +1913,7 @@ cbUseEigerMask = Checkbutton(
     frameAdvanced, text="Use Eiger Mask", variable=varEigerMask, onvalue=1, offvalue=0)
 cbUseEigerMask.select()
 cb_old_Fit2d_geometry = Checkbutton(frameAdvanced, text="Old Fit 2D geometry", variable=varOldGeometry, onvalue=1, offvalue=0)
-cb_old_Fit2d_geometry.deselect()
+cb_old_Fit2d_geometry.select()
 # Progress bars
 progBarSAXS = ttk.Progressbar(
     frameReduction, orient=HORIZONTAL, length=300, mode='determinate')
